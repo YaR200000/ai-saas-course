@@ -10,3 +10,8 @@ Beginner programmers and students.
 - AI coding assistant
 - Code explanations
 - Learning progress tracking
+
+## Development Plan
+- Build the first prototype
+- Test the AI assistant
+- Improve the user experience
