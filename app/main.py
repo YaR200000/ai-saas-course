@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 
 async def start_handler(message: Message) -> None:
-    await message.answer("Привіт! Радий тебе бачити 👋")
+    await message.answer("Привіт! Я працюю через Docker з автоматичним оновленням! 🐳🚀")
 
 
 async def main() -> None:
