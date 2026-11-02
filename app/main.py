@@ -3,13 +3,21 @@ import os
 from pathlib import Path
 
 from aiogram import Bot, Dispatcher
-from aiogram.filters import CommandStart
+from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
 from dotenv import load_dotenv
 
 
 async def start_handler(message: Message) -> None:
     await message.answer("Привіт! Я працюю через Docker з автоматичним оновленням! 🐳🚀")
+
+
+async def help_handler(message: Message) -> None:
+    await message.answer(
+        "🤖 Доступні команди:\n"
+        "/start — привітання\n"
+        "/help — список доступних команд"
+    )
 
 
 async def main() -> None:
@@ -23,6 +31,7 @@ async def main() -> None:
 
     dispatcher = Dispatcher()
     dispatcher.message.register(start_handler, CommandStart())
+    dispatcher.message.register(help_handler, Command("help"))
 
     async with Bot(token=token) as bot:
         await dispatcher.start_polling(bot)
