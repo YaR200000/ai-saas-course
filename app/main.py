@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 from pathlib import Path
 
@@ -8,11 +9,16 @@ from aiogram.types import Message
 from dotenv import load_dotenv
 
 
+logger = logging.getLogger(__name__)
+
+
 async def start_handler(message: Message) -> None:
+    logger.info("received /start command")
     await message.answer("Привіт! Я працюю через Docker з автоматичним оновленням! 🐳🚀")
 
 
 async def help_handler(message: Message) -> None:
+    logger.info("received /help command")
     await message.answer(
         "🤖 Доступні команди:\n"
         "/start — привітання\n"
@@ -21,9 +27,14 @@ async def help_handler(message: Message) -> None:
 
 
 async def main() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)s | %(message)s",
+    )
     load_dotenv(Path(__file__).resolve().parent.parent / ".env")
     token = os.getenv("BOT_TOKEN", "").strip()
     if not token:
+        logger.error("BOT_TOKEN не задано або порожній. Запуск бота припинено.")
         raise SystemExit(
             "Помилка: BOT_TOKEN не задано. Встановіть змінну середовища "
             "BOT_TOKEN або додайте її до файлу .env."
@@ -34,6 +45,7 @@ async def main() -> None:
     dispatcher.message.register(help_handler, Command("help"))
 
     async with Bot(token=token) as bot:
+        logger.info("bot started")
         await dispatcher.start_polling(bot)
 
 
