@@ -1,5 +1,11 @@
 # AI SaaS Course
 
+## Урок 7, блок 3: React Admin Dashboard
+
+Локальний адаптивний dashboard у `frontend/`: картки доходів, витрат і балансу,
+таблиця з пагінацією, loading/error/empty states. Дані лише через FastAPI.
+Запуск і перевірки: [frontend/README.md](frontend/README.md).
+
 ## Урок 7, блок 1: локальний Transactions API
 
 Додано окремий FastAPI для читання витрат одного користувача без запуску
