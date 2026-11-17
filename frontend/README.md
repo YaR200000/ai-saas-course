@@ -56,3 +56,8 @@ HTTP-сервером. Дані у тестах — лише фікстури, �
 `npm run preview` дозволяє локально переглянути dist з тим самим proxy;
 це не production-сервер. Статична публікація dist без локального backend/proxy
 не працюватиме. node_modules, dist, .tools та логи виключені з Git.
+
+Блок 4: [інтеграційні докази, аудит та ручна перевірка для PowerShell](../docs/dashboard-verification.md).
+Окремий інтеграційний набір запускається з кореня через
+`python -B -m pytest tests/test_dashboard_integration.py -p no:cacheprovider -q`;
+він використовує справжній FastAPI TestClient та ізольовану SQLite, без Neon.
