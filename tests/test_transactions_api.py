@@ -159,3 +159,81 @@ def test_configuration_error_hides_details(monkeypatch):
             pass
     assert "private-connection-string" not in str(error.value)
     assert error.value.__suppress_context__
+
+
+def test_summary_contract_multiple_expenses_and_owner(client):
+    response = client.get("/api/summary?user_id=2&telegram_id=202")
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    assert response.json() == {
+        "total_income": "0.00", "total_expense": "10000000125.59",
+        "balance": "-10000000125.59",
+    }
+
+
+def test_summary_without_transactions(client):
+    app.state.allowed_user_id = 999
+    response = client.get("/api/summary")
+    assert response.status_code == 200
+    assert response.json() == {
+        "total_income": "0.00", "total_expense": "0.00", "balance": "0.00",
+    }
+
+
+def test_summary_one_expense(client):
+    app.state.allowed_user_id = 2
+    assert client.get("/api/summary").json() == {
+        "total_income": "0.00", "total_expense": "9.99", "balance": "-9.99",
+    }
+
+
+def test_summary_independent_of_transactions_pagination(client):
+    before = client.get("/api/summary").json()
+    assert len(client.get("/api/transactions?limit=1&offset=1").json()) == 1
+    assert client.get("/api/summary?limit=1&offset=999").json() == before
+
+
+def test_summary_decimal_arithmetic(client):
+    # SQLite SUM uses floating point internally. Supply PostgreSQL-like NUMERIC
+    # results here to independently verify exact Decimal handling by the API.
+    from unittest.mock import MagicMock
+
+    result = MagicMock()
+    result.scalar_one.return_value = Decimal("0.30")
+    session = AsyncMock()
+    session.execute.return_value = result
+    session.__aenter__.return_value = session
+    app.state.session_factory = lambda: session
+    assert client.get("/api/summary").json() == {
+        "total_income": "0.00", "total_expense": "0.30", "balance": "-0.30",
+    }
+    statement = session.execute.call_args.args[0]
+    assert "sum(transactions.amount)" in str(statement)
+    assert "transactions.user_id =" in str(statement)
+    assert "LIMIT" not in str(statement)
+
+
+@pytest.mark.parametrize("stage", ["open", "execute"])
+def test_summary_database_failure_is_safe(client, caplog, stage):
+    marker = "private-connection-string SQL parameters user_id=123"
+    if stage == "open":
+        def fail():
+            raise RuntimeError(marker)
+        app.state.session_factory = fail
+    else:
+        session = AsyncMock()
+        session.__aenter__.return_value = session
+        session.execute.side_effect = RuntimeError(marker)
+        app.state.session_factory = lambda: session
+    response = client.get("/api/summary")
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Service unavailable."}
+    assert response.headers["cache-control"] == "no-store"
+    assert marker not in response.text + caplog.text
+    assert all(record.exc_info is None for record in caplog.records)
+
+
+def test_summary_reuses_local_access_restrictions(client):
+    response = client.get("/api/summary", headers={"origin": "https://attacker.example"})
+    assert response.status_code == 403
+    assert response.headers["cache-control"] == "no-store"

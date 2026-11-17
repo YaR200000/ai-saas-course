@@ -2,6 +2,7 @@
 
 from contextlib import asynccontextmanager
 from datetime import datetime
+from decimal import Decimal
 from ipaddress import ip_address
 import logging
 import os
@@ -10,7 +11,7 @@ from typing import Literal
 from fastapi import FastAPI, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.database import create_database_engine, create_session_factory
 from app.models import Category, Transaction
@@ -109,4 +110,31 @@ async def transactions(
         ) for row in rows]
     except Exception:
         logger.error("transactions_read_failed")
+        return JSONResponse({"detail": "Service unavailable."}, status_code=503)
+
+
+class SummaryResponse(BaseModel):
+    total_income: str
+    total_expense: str
+    balance: str
+
+
+@app.get("/api/summary", response_model=SummaryResponse)
+async def summary(request: Request):
+    # Aggregate every expense of the server-selected owner, without pagination.
+    statement = select(func.sum(Transaction.amount)).where(
+        Transaction.user_id == request.app.state.allowed_user_id
+    )
+    try:
+        async with request.app.state.session_factory() as session:
+            total = (await session.execute(statement)).scalar_one()
+        total_expense = total if total is not None else Decimal("0.00")
+        total_income = Decimal("0.00")
+        return SummaryResponse(
+            total_income=format(total_income, ".2f"),
+            total_expense=format(total_expense, ".2f"),
+            balance=format(total_income - total_expense, ".2f"),
+        )
+    except Exception:
+        logger.error("summary_read_failed")
         return JSONResponse({"detail": "Service unavailable."}, status_code=503)
