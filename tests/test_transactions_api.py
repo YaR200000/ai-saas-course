@@ -57,6 +57,8 @@ def client(monkeypatch):
     fake_engine = AsyncMock()
     monkeypatch.setenv("API_ALLOWED_USER_ID", "1")
     monkeypatch.setattr("app.api.create_database_engine", lambda: fake_engine)
+    monkeypatch.setattr("app.api.check_schema_ready", AsyncMock())
+    monkeypatch.delenv("ADMIN_PASSWORD", raising=False)
     monkeypatch.setattr("app.api.create_session_factory", lambda _: Session)
     try:
         with TestClient(app, base_url="http://127.0.0.1:8000",
@@ -74,7 +76,7 @@ def test_contract_order_money_and_owner(client):
     rows = response.json()
     assert [row["id"] for row in rows] == ["3", "2", "1"]
     assert [row["amount"] for row in rows] == ["125.50", "9999999999.99", "0.10"]
-    assert set(rows[0]) == {"id", "created_at", "type", "amount", "category",
+    assert set(rows[0]) == {"id", "created_at", "date", "type", "amount", "category",
                             "description", "currency"}
     assert rows[0]["type"] == "expense"
     assert rows[0]["category"] == "Інше"
@@ -205,7 +207,7 @@ def test_summary_decimal_arithmetic(client):
     from unittest.mock import MagicMock
 
     result = MagicMock()
-    result.scalar_one.return_value = Decimal("0.30")
+    result.one.return_value = (Decimal("0.00"), Decimal("0.30"))
     session = AsyncMock()
     session.execute.return_value = result
     session.__aenter__.return_value = session
@@ -243,3 +245,16 @@ def test_summary_reuses_local_access_restrictions(client):
     response = client.get("/api/summary", headers={"origin": "https://attacker.example"})
     assert response.status_code == 403
     assert response.headers["cache-control"] == "no-store"
+
+
+def test_summary_large_mixed_totals_remain_exact(client):
+    from unittest.mock import MagicMock
+    result = MagicMock()
+    result.one.return_value = (Decimal("10000000000000000000000000000.30"), Decimal("0.10"))
+    session = AsyncMock()
+    session.execute.return_value = result
+    session.__aenter__.return_value = session
+    app.state.session_factory = lambda: session
+    assert client.get("/api/summary").json() == {
+        "total_income": "10000000000000000000000000000.30",
+        "total_expense": "0.10", "balance": "10000000000000000000000000000.20"}
