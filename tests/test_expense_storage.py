@@ -77,6 +77,8 @@ async def test_persistence_and_existing_user(db):
         assert row.description == "тестовий опис"
         assert row.telegram_chat_id == 101
         assert row.created_at is not None
+        assert row.type == "expense"
+        assert row.date == await session.scalar(select(func.date(func.timezone("Europe/Kyiv", row.created_at))))
         assert await session.scalar(select(User.telegram_id).where(User.id == row.user_id)) == 101
         assert await session.scalar(select(Category.name).where(Category.id == row.category_id)) == "Інше"
 

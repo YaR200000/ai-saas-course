@@ -20,6 +20,12 @@ from app.models import Base, Category, Transaction, User
 def client(monkeypatch):
     engine = create_engine("sqlite://", poolclass=StaticPool,
                            connect_args={"check_same_thread": False})
+    # SQLite contract tests do not verify PostgreSQL timezone semantics.
+    # Let the new server default execute; real Kyiv dates are tested in PostgreSQL.
+    with engine.connect() as connection:
+        connection.connection.driver_connection.create_function(
+            "timezone", 2, lambda zone, timestamp: timestamp,
+        )
     Base.metadata.create_all(engine)
     now = datetime(2026, 11, 17, 9, tzinfo=timezone.utc)
     with engine.begin() as connection:

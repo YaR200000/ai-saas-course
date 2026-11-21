@@ -1,7 +1,7 @@
 from decimal import Decimal
-from datetime import datetime, timezone
+from datetime import date as calendar_date, datetime, timezone
 
-from sqlalchemy import BigInteger, CheckConstraint, DateTime, ForeignKey, Numeric, String, Text, UniqueConstraint, func
+from sqlalchemy import BigInteger, CheckConstraint, Date, DateTime, ForeignKey, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -57,6 +57,7 @@ class Transaction(Base):
 
     __table_args__ = (
         CheckConstraint("amount > 0", name="ck_transactions_amount_positive"),
+        CheckConstraint("type IN ('income', 'expense')", name="ck_transactions_type"),
         UniqueConstraint("telegram_chat_id", "telegram_message_id", name="uq_transactions_telegram_message"),
         CheckConstraint(
             "(telegram_chat_id IS NULL) = (telegram_message_id IS NULL)",
@@ -92,7 +93,16 @@ class Transaction(Base):
         nullable=False,
     )
 
-    # Nullable only for legacy expenses created before message deduplication.
+    type: Mapped[str] = mapped_column(
+        String(7), nullable=False, server_default="expense",
+    )
+
+    date: Mapped[calendar_date] = mapped_column(
+        Date, nullable=False,
+        server_default=func.date(func.timezone("Europe/Kyiv", func.current_timestamp())),
+    )
+
+    # NULL for legacy expenses and operations created outside Telegram.
     telegram_chat_id: Mapped[int | None] = mapped_column(BigInteger)
     telegram_message_id: Mapped[int | None] = mapped_column(BigInteger)
 
