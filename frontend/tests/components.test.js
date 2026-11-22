@@ -55,6 +55,27 @@ test('components render loading, error, empty, negative balance, and partial dat
     assert.match(enabled, /Завершити адміністративний режим/);
     assert.match(enabled, /disabled/);
     assert.match(render(Composer, { onCreated() {}, onRefresh() {}, refreshFailed: false }), /Створити операцію/);
+    const adminTable = render(TransactionsTable, { ...common, admin: true, pending: true,
+      resource: { status: 'ready', data: [incomeRow] }, onDelete() {} });
+    assert.match(adminTable, /<th>Дії<\/th>/);
+    assert.match(adminTable, /aria-label="Видалити дохід/);
+    assert.match(adminTable, /disabled=""[^>]*aria-label="Видалити/);
+    assert.doesNotMatch(income, />Видалити</);
+    const { default: Dialog } = await vite.ssrLoadModule('/src/DeleteTransactionDialog.jsx');
+    const dialog = render(Dialog, { transaction: { ...incomeRow, description: '<script>private</script>' }, pending: true,
+      onCancel() {}, onConfirm() {}, restoreFocus() {} });
+    assert.match(dialog, /<dialog/);
+    assert.match(dialog, /aria-labelledby="delete-title"/);
+    assert.match(dialog, /aria-describedby="delete-warning"/);
+    assert.match(dialog, /не можна скасувати/);
+    assert.match(dialog, /&lt;script&gt;/);
+    assert.doesNotMatch(dialog, /<script>/);
+    assert.match(dialog, /Видаляємо…/);
+    assert.equal((dialog.match(/disabled=""/g) || []).length, 2);
+    const formWithSharedAdmin = render(Composer, { password: 'synthetic-not-for-html', pending: true,
+      onCreated() {}, onRefresh() {}, onUnauthorized() {}, runAdmin() {}, refreshFailed: false });
+    assert.match(formWithSharedAdmin, /fieldset disabled/);
+    assert.doesNotMatch(formWithSharedAdmin, /synthetic-not-for-html/);
     // Independent resources can render available data alongside another error.
     assert.match(summary + render(TransactionsTable, { ...common, resource: failed }), /−245,50/);
     assert.match(table + render(SummaryCards, { ...common, resource: failed }), /125,50/);

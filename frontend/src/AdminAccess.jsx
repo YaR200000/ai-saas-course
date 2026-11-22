@@ -12,7 +12,7 @@ export default function AdminAccess({ enabled, busy, onPassword, onExit }) {
     <div className="form-field"><label htmlFor="admin-password">Адміністративний пароль</label>
       <input id="admin-password" type="password" autoComplete="off" value={input} required
         onChange={(event) => setInput(event.target.value)} aria-describedby="admin-hint" />
-      <small id="admin-hint">Сервер перевірить пароль під час створення операції.</small></div>
-    <button className="button secondary" type="submit" disabled={!input}>Перейти до створення</button>
+      <small id="admin-hint">Сервер перевірить пароль під час адміністративного запиту.</small></div>
+    <button className="button secondary" type="submit" disabled={!input || busy}>Увімкнути адміністративний режим</button>
   </form>;
 }

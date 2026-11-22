@@ -48,12 +48,52 @@ async function httpError(response, writing = false) {
   const messages = {
     401: 'Неправильний пароль. Введіть його повторно.',
     403: 'Локальний захист відхилив запит. Відкрийте dashboard за локальною адресою.',
-    422: 'Перевірте поля форми.',
+    422: writing === 'delete' ? 'Некоректний ідентифікатор операції.' : 'Перевірте поля форми.',
+    ...(writing === 'delete' ? { 404: 'Операція вже недоступна. Оновіть список.' } : {}),
   };
-  const unknown = writing && ![401, 403, 422].includes(response.status) && !disabled;
+  const knownFailures = writing === 'delete' ? [401, 403, 404, 422] : [401, 403, 422];
+  const unknown = Boolean(writing) && !knownFailures.includes(response.status) && !disabled;
   return new ApiError(disabled ? 'Адміністративний запис вимкнений на сервері.' :
-    messages[response.status] || (writing ? 'Збереження не підтверджено. Перевірте список операцій перед повторним надсиланням.' :
+    messages[response.status] || (writing === 'delete' ? 'Видалення не підтверджено. Перевірте список перед повторною дією.' : writing ? 'Збереження не підтверджено. Перевірте список операцій перед повторним надсиланням.' :
       'Не вдалося отримати дані API. Перевірте локальний backend.'), response.status, fields, unknown);
+}
+
+export function validTransactionId(id) {
+  return typeof id === 'string' && /^[0-9]{1,19}$/.test(id) &&
+    !/^0+$/.test(id) && (id.length < 19 || id <= '9223372036854775807');
+}
+
+export async function deleteTransaction(id, password) {
+  if (!validTransactionId(id)) throw new ApiError('Некоректний ідентифікатор операції.', 422);
+  const controller = new AbortController();
+  let timer;
+  const deadline = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new DOMException('DELETE deadline exceeded', 'AbortError'));
+    }, 15000);
+  });
+  try {
+    // The deadline includes body parsing. Race also bounds a stalled body reader
+    // even if it does not promptly reject after the transport is aborted.
+    await Promise.race([deadline, (async () => {
+      const response = await fetch(`/api/transactions/${id}`, {
+        method: 'DELETE', credentials: 'omit', redirect: 'error', cache: 'no-store',
+        headers: { Authorization: `Bearer ${password}` }, signal: controller.signal,
+      });
+      if (response.status === 204) return;
+      if (!response.ok) throw await httpError(response, 'delete');
+      throw new ApiError('Відповідь сервера неоднозначна. Перевірте список перед повторною дією.', response.status, {}, true);
+    })()]);
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new ApiError('Час очікування видалення вичерпано (15 секунд). Результат не підтверджено: спершу перевірте список операцій.', 0, {}, true);
+    }
+    if (error instanceof ApiError) throw error;
+    throw new ApiError('З’єднання перервано. Видалення не підтверджено: спершу перевірте список операцій.', 0, {}, true);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function request(path, validate, signal) {

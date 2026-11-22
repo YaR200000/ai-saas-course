@@ -2,6 +2,8 @@ import { todayKyiv, validCalendarDate } from './api.js';
 
 export const emptyTransaction = () => ({ type: 'expense', amount: '', category: '', description: '', date: todayKyiv() });
 
+export const pageAfterDeletion = (page, count) => page > 0 && count === 1 ? page - 1 : page;
+
 export function validateTransaction(values) {
   const errors = {};
   const amount = values.amount.trim().replace(',', '.');

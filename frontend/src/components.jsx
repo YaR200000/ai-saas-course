@@ -25,9 +25,9 @@ export function SummaryCards({ resource, onRetry }) {
   </section>;
 }
 
-export function TransactionsTable({ resource, page, onPage, onRetry }) {
+export function TransactionsTable({ resource, page, onPage, onRetry, admin = false, pending = false, deletionBlocked = false, onDelete }) {
   return <section className="transactions panel" aria-labelledby="transactions-heading">
-    <div className="section-heading"><div><h2 id="transactions-heading">Останні операції</h2>
+    <div className="section-heading"><div><h2 id="transactions-heading" tabIndex={-1}>Останні операції</h2>
       <p>Нові записи першими · календарна дата операції</p></div><span className="badge">UAH · гривня</span></div>
     {resource.status === 'error' ? <ErrorState message={resource.error} onRetry={onRetry} /> :
       resource.status === 'loading' ? <div className="table-loading" role="status">{[0, 1, 2, 3].map((n) =>
@@ -37,16 +37,18 @@ export function TransactionsTable({ resource, page, onPage, onRetry }) {
         <p>{page === 0 ? 'Створіть дохід або витрату у формі вище, або додайте витрату через Telegram-бота.' : 'Поверніться на попередню сторінку, щоб переглянути записи.'}</p>
         {page === 0 && <code>/expense 125.50 кава</code>}</div> :
       <div className="table-scroll"><table><caption className="sr-only">Фінансові операції, сторінка {page + 1}</caption>
-        <thead><tr><th>Дата</th><th>Тип</th><th className="numeric">Сума</th><th>Категорія</th><th>Опис</th></tr></thead>
+        <thead><tr><th>Дата</th><th>Тип</th><th className="numeric">Сума</th><th>Категорія</th><th>Опис</th>{admin && <th>Дії</th>}</tr></thead>
         <tbody>{resource.data.map((row) => <tr key={row.id}>
           <td className="date-cell">{formatCalendarDate(row.date)}</td><td><span className={`type-badge ${row.type}`}>{row.type === 'income' ? 'Дохід' : 'Витрата'}</span></td>
           <td className={`numeric ${row.type}-amount`}>{row.type === 'income' ? '+' : '−'}{formatMoney(row.amount)}</td>
           <td><span className="category">{row.category}</span></td><td className="description">{row.description}</td>
+          {admin && <td><button type="button" className="button danger" disabled={pending || deletionBlocked} onClick={(event) => onDelete(row, event.currentTarget)}
+            aria-label={`Видалити ${row.type === 'income' ? 'дохід' : 'витрату'} ${formatMoney(row.amount)} від ${formatCalendarDate(row.date)}`}>Видалити</button></td>}
         </tr>)}</tbody></table></div>}
     <div className="table-footer"><span>Сторінка {page + 1} <span className="footer-detail">· до {PAGE_SIZE} операцій</span></span>
-      <nav aria-label="Сторінки операцій"><button className="button secondary" disabled={page === 0 || resource.status === 'loading'}
+      <nav aria-label="Сторінки операцій"><button className="button secondary" disabled={pending || page === 0 || resource.status === 'loading'}
         onClick={() => onPage(page - 1)}>← Назад</button>
-        <button className="button secondary" disabled={resource.status !== 'ready' || resource.data.length < PAGE_SIZE}
+        <button className="button secondary" disabled={pending || resource.status !== 'ready' || resource.data.length < PAGE_SIZE}
           onClick={() => onPage(page + 1)}>Далі →</button></nav></div>
   </section>;
 }

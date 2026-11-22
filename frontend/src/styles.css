@@ -6,6 +6,18 @@
   font-weight:400;
   font-size:14px
 }
+.admin-panel { padding:18px 25px 0; margin-bottom:20px; }
+.button.danger { color:#932638; background:#fff1f2; border:1px solid #e6bec5; }
+.button.danger:hover:not(:disabled) { background:#fbe1e5; }
+.delete-dialog { width:min(520px,calc(100% - 32px)); max-height:85vh; overflow:auto; border:1px solid #d9dce7; border-radius:12px; padding:24px; color:#252938; }
+.delete-dialog::backdrop { background:rgb(25 28 45 / 55%); }
+.delete-dialog h2 { margin-top:0; }
+.delete-dialog dl { display:grid; grid-template-columns:auto 1fr; gap:10px 18px; }
+.delete-dialog dt { font-weight:600; }
+.delete-dialog dd { margin:0; overflow-wrap:anywhere; min-width:0; }
+.dialog-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:22px; }
+.dialog-hint { font-size:12px; color:#626a7d; }
+.delete-dialog button:focus-visible { outline:3px solid #a397ee; outline-offset:3px; }
 .transaction-composer { margin-bottom:24px; }
 .composer-content { padding:0 25px 24px; }
 .admin-access { display:flex; align-items:flex-end; gap:16px; flex-wrap:wrap; margin-bottom:18px; }
