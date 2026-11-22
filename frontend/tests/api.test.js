@@ -5,7 +5,7 @@ import { getSummary, getTransactions, formatMoney, formatDate, PAGE_SIZE } from 
 const originalFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = originalFetch; });
 const summary = { total_income: '0.00', total_expense: '245.50', balance: '-245.50' };
-const transaction = { id: '9007199254740993', created_at: '2026-11-17T09:00:00Z',
+const transaction = { id: '9007199254740993', created_at: '2026-11-17T09:00:00Z', date: '2026-11-17',
   type: 'expense', amount: '125.50', category: 'Інше', description: 'кава', currency: 'UAH' };
 
 test('summary uses the exact backend contract and relative URL', async () => {

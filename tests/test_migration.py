@@ -38,15 +38,21 @@ INSERT INTO transactions (user_id, category_id, amount, description)
 async def execute_script(engine, script):
     # asyncpg supports the full SQL script, including DO $$ and BEGIN/COMMIT.
     # Do not split by semicolons: that would break the migration's DO block.
-    async with engine.connect() as connection:
-        raw = await connection.get_raw_connection()
-        driver = raw.driver_connection
-        try:
-            await driver.execute(script)
-        finally:
-            # Failed explicit transactions remain aborted until rolled back.
-            if driver.is_in_transaction():
-                await driver.execute("ROLLBACK")
+    try:
+        async with engine.connect() as connection:
+            raw = await connection.get_raw_connection()
+            driver = raw.driver_connection
+            try:
+                await driver.execute(script)
+            finally:
+                # Failed explicit transactions remain aborted until rolled back.
+                if driver.is_in_transaction():
+                    await driver.execute("ROLLBACK")
+    finally:
+        # Raw asyncpg DDL bypasses SQLAlchemy's cache invalidation. After the
+        # connection is returned, retire the pool (also on failed scripts) so
+        # subsequent snapshots cannot reuse pre-DDL prepared statements.
+        await engine.dispose()
 
 
 async def legacy_snapshot(engine):
@@ -87,6 +93,8 @@ async def test_upgrade_preserves_data_and_supports_new_code(local_engine):
         for table, expected in zip(("users", "categories"), before[:2]):
             assert list((await connection.execute(text(f"SELECT * FROM {table} ORDER BY id"))).tuples()) == expected
     factory = async_sessionmaker(local_engine, expire_on_commit=False)
+    # Current bot requires both migrations; preservation above still tests 001 alone.
+    await execute_script(local_engine, (MIGRATION.parent / "002_transaction_type_date.sql").read_text(encoding="utf-8"))
     values = dict(telegram_id=101, chat_id=101, message_id=10,
                   amount=Decimal("25.00"), description="нова тестова витрата")
     assert await save_expense(factory, **values)

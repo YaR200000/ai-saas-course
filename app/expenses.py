@@ -2,7 +2,7 @@
 
 from decimal import Decimal, InvalidOperation
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 
 from app.models import Category, Transaction, User
@@ -55,6 +55,8 @@ async def save_expense(session_factory, *, telegram_id: int, chat_id: int,
             expense_id = await session.scalar(
                 insert(Transaction).values(
                     user_id=user_id, category_id=category_id, amount=amount,
+                    type="expense",
+                    date=func.date(func.timezone("Europe/Kyiv", func.current_timestamp())),
                     description=description, telegram_chat_id=chat_id,
                     telegram_message_id=message_id,
                 ).on_conflict_do_nothing(

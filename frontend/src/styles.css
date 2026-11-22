@@ -6,6 +6,44 @@
   font-weight:400;
   font-size:14px
 }
+.admin-panel { padding:18px 25px 0; margin-bottom:20px; }
+.button.danger { color:#932638; background:#fff1f2; border:1px solid #e6bec5; }
+.button.danger:hover:not(:disabled) { background:#fbe1e5; }
+.delete-dialog { width:min(520px,calc(100% - 32px)); max-height:85vh; overflow:auto; border:1px solid #d9dce7; border-radius:12px; padding:24px; color:#252938; }
+.delete-dialog::backdrop { background:rgb(25 28 45 / 55%); }
+.delete-dialog h2 { margin-top:0; }
+.delete-dialog dl { display:grid; grid-template-columns:auto 1fr; gap:10px 18px; }
+.delete-dialog dt { font-weight:600; }
+.delete-dialog dd { margin:0; overflow-wrap:anywhere; min-width:0; }
+.dialog-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:22px; }
+.dialog-hint { font-size:12px; color:#626a7d; }
+.delete-dialog button:focus-visible { outline:3px solid #a397ee; outline-offset:3px; }
+.transaction-composer { margin-bottom:24px; }
+.composer-content { padding:0 25px 24px; }
+.admin-access { display:flex; align-items:flex-end; gap:16px; flex-wrap:wrap; margin-bottom:18px; }
+.admin-access p,.admin-access small { color:#626a7d; font-size:12px; }
+.admin-access .form-field { flex:1; max-width:420px; min-width:200px; }
+.transaction-form fieldset { border:0; padding:0; margin:0 0 16px; display:grid; grid-template-columns:1fr 1fr; gap:16px; min-width:0; }
+.form-field { display:flex; flex-direction:column; gap:7px; min-width:0; }
+.form-field label { font-size:12px; font-weight:600; }
+.form-field input,.form-field select,.form-field textarea { font:inherit; color:inherit; background:#fafbfe; border:1px solid #d9dce7; border-radius:7px; padding:10px 12px; width:100%; min-width:0; }
+.form-field textarea { resize:vertical; }
+.form-field :is(input,select,textarea):focus-visible { outline:3px solid #a397ee; outline-offset:2px; }
+.form-field [aria-invalid=true] { border-color:#ae3547; }
+.field-error { color:#a02b3c; }
+.field-description { grid-column:1 / -1; }
+.form-notice { margin-top:16px; padding:12px; border-radius:7px; background:#edf8f2; color:#216348; }
+.form-notice p { margin:0 0 8px; overflow-wrap:anywhere; }
+.notice-error { background:#fff1f2; color:#952c3c; }
+.income-amount { color:#216348; font-weight:600; }
+.type-badge.income { color:#216348; background:#edf8f2; }
+.type-badge.income:before { background:#397b59; }
+@media(max-width:760px) {
+  .transaction-form fieldset { grid-template-columns:1fr; }
+  .composer-content { padding:0 16px 18px; }
+  .admin-access { align-items:stretch; flex-direction:column; }
+  .admin-access .form-field { max-width:none; min-width:0; }
+}
 * {
   box-sizing:border-box
 }
