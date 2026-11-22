@@ -5,10 +5,11 @@ from decimal import Decimal, localcontext
 from ipaddress import ip_address
 import logging
 import os
+import re
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import ValidationError
 from sqlalchemy import func, select
 
@@ -17,7 +18,7 @@ from app.models import Category, Transaction
 from app.schemas import SummaryResponse, TransactionCreate, TransactionResponse
 from app.schema_readiness import check_schema_ready
 from app.security import require_admin
-from app.transactions import create_transaction
+from app.transactions import create_transaction, delete_transaction
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +110,30 @@ async def post_transaction(request: Request, data: TransactionCreate = Depends(t
     except Exception:
         logger.error("transaction_create_failed")
         return JSONResponse({"detail": "Creation could not be confirmed; refresh before retrying."}, status_code=503)
+
+
+async def deletion_target(request: Request, admin=Depends(require_admin)):
+    # Authenticate before validating the path; never accept owner information.
+    raw = request.path_params["id"]
+    if not re.fullmatch(r"[0-9]{1,19}", raw):
+        raise HTTPException(422, "Invalid transaction ID.")
+    value = int(raw)
+    if not 1 <= value <= 2**63 - 1:
+        raise HTTPException(422, "Invalid transaction ID.")
+    return value
+
+
+@app.delete("/api/transactions/{id}", status_code=204, response_class=Response)
+async def remove_transaction(request: Request, transaction_id: int = Depends(deletion_target)):
+    try:
+        deleted = await delete_transaction(request.app.state.session_factory,
+                                           request.app.state.allowed_user_id, transaction_id)
+    except Exception:
+        logger.error("transaction_delete_failed")
+        return JSONResponse({"detail": "Deletion could not be confirmed; refresh before retrying."}, status_code=503)
+    if not deleted:
+        raise HTTPException(404, "Transaction not found.")
+    return Response(status_code=204)
 
 
 @app.get("/api/transactions", response_model=list[TransactionResponse])

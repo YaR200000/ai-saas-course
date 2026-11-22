@@ -1,5 +1,5 @@
-"""Atomic PostgreSQL creation shared by HTTP routes, without environment access."""
-from sqlalchemy import select
+"""Atomic PostgreSQL operations for HTTP routes, without environment access."""
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 
 from app.models import Category, Transaction, User
@@ -30,3 +30,21 @@ async def create_transaction(session_factory, owner_id: int, data: TransactionCr
             )
         # The transaction context has confirmed commit. Never retry uncertain commits.
         return response
+
+
+async def delete_transaction(session_factory, owner_id: int, transaction_id: int) -> bool:
+    """Delete only this owner's row; report success only after commit.
+
+    No ORM objects are staged: the Core DELETE executes immediately, and there
+    is no pending ORM flush. The transaction context rolls back on execution
+    errors. Commit errors propagate without retry or claims about durability.
+    """
+    async with session_factory() as session:
+        async with session.begin():
+            deleted_id = await session.scalar(
+                delete(Transaction).where(
+                    Transaction.id == transaction_id,
+                    Transaction.user_id == owner_id,
+                ).returning(Transaction.id)
+            )
+        return deleted_id is not None

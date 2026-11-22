@@ -1,5 +1,51 @@
 # Урок 8, блок B: локальний Backend API
 
+## Урок 8, блок D: фізичне видалення
+
+`DELETE /api/transactions/{id}` без тіла, з `Authorization: Bearer <пароль>`.
+Використовує той самий require_admin та middleware. Credentials перевіряються
+до ID. ID: десятковий додатний BIGINT 1–9223372036854775807, без float.
+Клієнтські user_id/headers не надають прав: власник тільки API_ALLOWED_USER_ID.
+
+Одна транзакція виконує DELETE WHERE id=:id AND user_id=:owner RETURNING id.
+Немає окремого SELECT власника. Категорії, користувачі й інші записи не змінюються.
+204 повертається тільки після успішного виходу з transaction context (commit),
+без JSON/тіла. Відсутній і чужий запис мають однаковий 404 Transaction not found.
+Повторний DELETE дає 404; два конкурентні DELETE — один 204, другий 404.
+
+401: credentials відсутні/неправильні; 403: локальний захист; 422: ID;
+503: запис вимкнено або помилка транзакції. При транзакційній помилці:
+`{"detail":"Deletion could not be confirmed; refresh before retrying."}`.
+Ця відповідь не стверджує ні успішне видалення, ні гарантовану відсутність зміни.
+SQL-помилка до commit виходить через session.begin(), який відкочує транзакцію.
+Core DELETE виконується негайно, сесія нова, pending ORM objects відсутні;
+явний flush не потрібний. Commit context може виконувати flush, але тут йому
+нема що записувати. При commit error SQLAlchemy намагається відкотити активну
+транзакцію; розрив з'єднання після server commit не дозволяє довести результат.
+Немає автоматичного retry або грубого визначення результату лише за фазою.
+Навіть помилка закриття сесії після commit не є доказом невиконання операції.
+
+Frontend цього блоку не змінено. Майбутній клієнт має обробляти 204 без json(),
+після успіху повторити GET списку й summary, а після мережевого збою спершу
+перевірити стан. HTTP-ідемпотентність не означає однаковий статус повторів:
+перший запит прибирає рядок, наступний уже нічого не змінює і повертає 404.
+
+Видалення незворотне через dashboard і не створює журнал історії. Фізичне
+видалення Telegram-операції прибирає також ключ дедуплікації повідомлення:
+повторна обробка старого повідомлення потенційно створить витрату знову.
+Бот і механізм дедуплікації цього блоку не змінені. Міграцій не потрібно.
+
+Перевірки без міграційних наборів:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m pytest tests/test_transaction_delete.py tests/test_transaction_delete_pg.py tests/test_transactions_api.py tests/test_transaction_post.py tests/test_expense_handler.py tests/test_expense_storage.py -p no:cacheprovider -q -rs
+```
+
+DELETE PostgreSQL-тести потребують наявного opt-in disposable local_engine
+з conftest: окрема локальна expense_test, випадкова ізольована схема. Вони
+не запускають SQL-міграції. Ін'єкція помилки перед commit перевіряє rollback,
+але не моделює втрату підтвердження вже виконаного commit у мережі.
+
 ## Передумови та схема
 
 API запускається окремо від Telegram. Імпорт не читає .env. DATABASE_URL,
@@ -63,7 +109,7 @@ commit повертається 201 із представленням опера
 
 GET /api/transactions повертає масив такого формату, справжній type та date.
 Порядок created_at DESC, id DESC; limit 1–100 (default 50), offset >=0.
-ID і гроші — рядки. Немає фільтрів і DELETE.
+ID і гроші — рядки. Фільтрів немає; DELETE описаний у блоці D вище.
 
 GET /api/summary одним SELECT агрегує всі операції власника, без пагінації:
 
