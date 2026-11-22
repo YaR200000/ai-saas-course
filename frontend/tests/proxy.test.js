@@ -14,6 +14,7 @@ test('real Vite proxy preserves same-origin headers and rejects foreign requests
     assert.equal(req.headers.origin, `http://${frontHost}`);
     assert.equal(req.headers['sec-fetch-site'], 'same-origin');
     assert.equal(req.headers['x-forwarded-for'], undefined);
+    assert.equal(req.headers.authorization, req.method === 'POST' ? 'Bearer synthetic-test-only' : undefined);
     res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
     res.end(JSON.stringify({ total_income: '0.00', total_expense: '0.00', balance: '0.00' }));
   });
@@ -34,6 +35,12 @@ test('real Vite proxy preserves same-origin headers and rejects foreign requests
     assert.equal(response.status, 200);
     assert.equal(response.headers.get('cache-control'), 'no-store');
     assert.equal((await response.json()).balance, '0.00');
+    const posted = await fetch(`http://${frontHost}/api/transactions`, {
+      method: 'POST', headers: { Origin: `http://${frontHost}`, 'Sec-Fetch-Site': 'same-origin',
+        Authorization: 'Bearer synthetic-test-only', 'Content-Type': 'application/json' },
+      body: '{}', redirect: 'error', signal: AbortSignal.timeout(5000),
+    });
+    assert.equal(posted.status, 200);
     for (const headers of [
       { Origin: 'https://attacker.example' },
       { Origin: 'null' },
@@ -53,7 +60,7 @@ test('real Vite proxy preserves same-origin headers and rejects foreign requests
       req.setTimeout(5000, () => req.destroy(new Error('Test HTTP timeout')));
     });
     assert.equal(deniedHost, 403);
-    assert.equal(calls, 1);
+    assert.equal(calls, 2);
   } finally {
     await vite?.close();
     backend.closeAllConnections();

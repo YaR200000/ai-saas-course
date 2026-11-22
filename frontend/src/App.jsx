@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { getSummary, getTransactions } from './api.js';
 import { useResource } from './useResource.js';
 import { SummaryCards, TransactionsTable } from './components.jsx';
+import TransactionComposer from './TransactionComposer.jsx';
 
 const loadSummary = (_, signal) => getSummary(signal);
 
@@ -27,9 +28,11 @@ export default function App() {
       <div className="main-content"><div className="page-heading"><div><p className="eyebrow">ВАШІ ФІНАНСИ, ЗРОЗУМІЛО</p><h1>Фінансовий огляд</h1><p>Усі операції та головні цифри — в одному місці.</p></div>
         <button className="button primary" onClick={refresh} disabled={busy}><span aria-hidden="true">↻</span>{busy ? 'Оновлюємо…' : 'Оновити дані'}</button></div>
         <SummaryCards resource={summary} onRetry={() => setSummaryVersion((n) => n + 1)} />
-        <div className="balance-notice"><span className="info-icon" aria-hidden="true">i</span><p><strong>Баланс є розрахунковим.</strong> Зараз обліковуються лише витрати; доходи ще не реєструються. Це не залишок на банківському рахунку.</p></div>
+        <div className="balance-notice"><span className="info-icon" aria-hidden="true">i</span><p><strong>Баланс є розрахунковим.</strong> Це різниця облікованих доходів і витрат, а не залишок на банківському рахунку.</p></div>
+        <TransactionComposer onCreated={() => { setPage(0); refresh(); }} onRefresh={refresh}
+          refreshFailed={summary.status === 'error' || transactions.status === 'error'} />
         <TransactionsTable resource={transactions} page={page} onPage={setPage} onRetry={() => setTransactionsVersion((n) => n + 1)} />
-        <footer className="page-footer"><span>finspace <span>·</span> Простір для фінансової ясності</span><span>Дані з вашого Telegram-бота</span></footer>
+        <footer className="page-footer"><span>finspace <span>·</span> Простір для фінансової ясності</span><span>Операції з dashboard і Telegram-бота</span></footer>
       </div>
     </main>
   </div>;
