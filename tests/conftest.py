@@ -11,6 +11,13 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.models import Base
 
 
+@pytest.fixture(autouse=True)
+def disable_real_gemini_key(monkeypatch):
+    # Tests opt into synthetic keys explicitly; never inherit a developer key.
+    for name in ("GEMINI_API_KEY", "GEMINI_MODEL", "GEMINI_TIMEOUT_SECONDS", "GEMINI_DAILY_LIMIT"):
+        monkeypatch.delenv(name, raising=False)
+
+
 @pytest_asyncio.fixture
 async def local_engine():
     # Do not fall back to DATABASE_URL; never load .env.

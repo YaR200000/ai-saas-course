@@ -5,6 +5,7 @@ import { SummaryCards, TransactionsTable } from './components.jsx';
 import TransactionComposer from './TransactionComposer.jsx';
 import AdminAccess from './AdminAccess.jsx';
 import DeleteTransactionDialog from './DeleteTransactionDialog.jsx';
+import AiAnalysisPanel from './AiAnalysisPanel.jsx';
 import { pageAfterDeletion, submissionGate } from './transactionForm.js';
 import { transactionListReducer } from './transactionList.js';
 
@@ -18,6 +19,7 @@ export default function App() {
   const [transactionsVersion, setTransactionsVersion] = useState(0);
   const [password, setPassword] = useState('');
   const [adminPending, setAdminPending] = useState(false);
+  const [financialRevision, setFinancialRevision] = useState(0);
   const [selected, setSelected] = useState(null);
   const [deleteNotice, setDeleteNotice] = useState(null);
   const gate = useRef(null);
@@ -29,10 +31,14 @@ export default function App() {
     setAdminPending(true);
     try { await operation(); } finally { setAdminPending(false); }
   });
+  const runMutation = (operation) => runAdmin(async () => {
+    setFinancialRevision((n) => n + 1);
+    await operation();
+  });
   const summary = useResource(loadSummary, 0, summaryVersion);
   const transactionPage = useResource(loadTransactions, page, transactionsVersion);
   const transactions = { ...transactionPage, data: transactionPage.data?.items ?? null, total: transactionPage.data?.total };
-  const refresh = (targetPage = page) => { setPage(targetPage); setSummaryVersion((n) => n + 1); setTransactionsVersion((n) => n + 1); };
+  const refresh = (targetPage = page) => { setFinancialRevision((n) => n + 1); setPage(targetPage); setSummaryVersion((n) => n + 1); setTransactionsVersion((n) => n + 1); };
   const busy = summary.status === 'loading' || transactions.status === 'loading';
   useEffect(() => {
     if (verifyAfter.current !== null && transactions.status === 'ready' && transactions.version >= verifyAfter.current) {
@@ -51,7 +57,7 @@ export default function App() {
   };
   const confirmDelete = () => {
     if (!selected || !password) return;
-    void runAdmin(async () => {
+    void runMutation(async () => {
       try { await deleteTransaction(selected.transaction.id, password); }
       catch (error) {
         setSelected(null);
@@ -81,13 +87,15 @@ export default function App() {
     <main id="overview"><header className="topbar"><span>Робочий простір <span className="breadcrumb-divider">/</span> <strong>Огляд</strong></span><span className="local-pill"><span className="connection-dot" />Локальний режим</span></header>
       <div className="main-content"><div className="page-heading"><div><p className="eyebrow">ВАШІ ФІНАНСИ, ЗРОЗУМІЛО</p><h1>Фінансовий огляд</h1><p>Усі операції та головні цифри — в одному місці.</p></div>
         <button className="button primary" onClick={() => refresh()} disabled={busy || adminPending}><span aria-hidden="true">↻</span>{busy ? 'Оновлюємо…' : 'Оновити дані'}</button></div>
-        <SummaryCards resource={summary} onRetry={() => setSummaryVersion((n) => n + 1)} />
+        <SummaryCards resource={summary} onRetry={() => { setFinancialRevision((n) => n + 1); setSummaryVersion((n) => n + 1); }} />
         <div className="balance-notice"><span className="info-icon" aria-hidden="true">i</span><p><strong>Баланс є розрахунковим.</strong> Це різниця облікованих доходів і витрат, а не залишок на банківському рахунку.</p></div>
         <section className="panel admin-panel" aria-label="Адміністративний доступ">
           <AdminAccess enabled={Boolean(password)} busy={adminPending} onPassword={setPassword} onExit={() => { setPassword(''); setSelected(null); }} />
         </section>
+        <AiAnalysisPanel password={password} pending={adminPending} runAdmin={runAdmin}
+          onUnauthorized={() => setPassword('')} revision={financialRevision} />
         <TransactionComposer onCreated={() => refresh(0)} onRefresh={() => refresh()}
-          password={password} onUnauthorized={() => setPassword('')} pending={adminPending} runAdmin={runAdmin}
+          password={password} onUnauthorized={() => setPassword('')} pending={adminPending} runAdmin={runMutation}
           refreshFailed={summary.status === 'error' || transactions.status === 'error'} />
         {deleteNotice && <div className={`form-notice ${deleteNotice.error ? 'notice-error' : ''}`} role={deleteNotice.error ? 'alert' : 'status'}>
           <p>{deleteNotice.message}</p>
@@ -95,7 +103,7 @@ export default function App() {
           {(deleteNotice.unknown || (deleteNotice.success && (summary.status === 'error' || transactions.status === 'error'))) &&
             <button type="button" className="button secondary" disabled={busy || adminPending} onClick={() => refresh()}>Оновити список і показники</button>}
         </div>}
-        <TransactionsTable resource={transactions} type={type} onType={(value) => { dispatchList({ type: 'filter', value }); setSelected(null); }} page={page} onPage={setPage} onRetry={() => setTransactionsVersion((n) => n + 1)}
+        <TransactionsTable resource={transactions} type={type} onType={(value) => { dispatchList({ type: 'filter', value }); setSelected(null); }} page={page} onPage={setPage} onRetry={() => { setFinancialRevision((n) => n + 1); setTransactionsVersion((n) => n + 1); }}
           admin={Boolean(password)} pending={adminPending} deletionBlocked={Boolean(deleteNotice?.unknown)} onDelete={(transaction, trigger) => {
             if (adminPending) return;
             focusReturn.current = trigger; setSelected({ transaction, page, count: transactions.data.length });
