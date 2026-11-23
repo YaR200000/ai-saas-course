@@ -1,6 +1,7 @@
 """Local single-owner HTTP API. Run separately from the bot."""
 
 from contextlib import asynccontextmanager
+import asyncio
 from decimal import Decimal, localcontext
 from ipaddress import ip_address
 import logging
@@ -16,10 +17,12 @@ from sqlalchemy import func, select, true
 
 from app.database import create_database_engine, create_session_factory
 from app.models import Category, Transaction
-from app.schemas import SummaryResponse, TransactionCreate, TransactionResponse
+from app.schemas import AiAnalysisResponse, GeminiAnalysis, SummaryResponse, TransactionCreate, TransactionResponse
 from app.schema_readiness import check_schema_ready
 from app.security import require_admin
 from app.transactions import create_transaction, delete_transaction
+from app.ai_analysis import AnalysisLimited, AnalysisLimiter, load_financial_snapshot
+from app.gemini_client import GeminiClient, GeminiFailure, GeminiSettings
 
 logger = logging.getLogger(__name__)
 
@@ -37,12 +40,30 @@ async def lifespan(application: FastAPI):
         engine = create_database_engine()
     except Exception:
         raise RuntimeError("API database configuration is invalid.") from None
+    application.state.gemini = None
     try:
         await check_schema_ready(engine)
         application.state.session_factory = create_session_factory(engine)
+        application.state.ai_limiter = AnalysisLimiter(20)
+        key = os.getenv("GEMINI_API_KEY", "").strip()
+        if key:
+            try:
+                settings = GeminiSettings.from_environment()
+                application.state.ai_limiter = AnalysisLimiter(settings.daily_limit)
+                application.state.gemini = GeminiClient(key, settings)
+            except Exception:
+                logger.error("ai_configuration_unavailable")
         yield
     finally:
-        await engine.dispose()
+        try:
+            gemini = getattr(application.state, "gemini", None)
+            if gemini is not None:
+                try:
+                    await gemini.aclose()
+                except Exception:
+                    logger.error("ai_client_close_failed")
+        finally:
+            await engine.dispose()
 
 
 app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
@@ -86,6 +107,46 @@ async def local_access(request: Request, call_next):
 @app.exception_handler(RequestValidationError)
 async def safe_validation_error(request, error):
     return JSONResponse({"detail": "Invalid request."}, status_code=422)
+
+
+@app.post("/api/ai/analyze-transactions", response_model=AiAnalysisResponse)
+async def analyze_transactions(request: Request, admin=Depends(require_admin)):
+    # Authentication precedes even body inspection and all financial reads.
+    async for chunk in request.stream():
+        if chunk:
+            raise HTTPException(422, "This endpoint does not accept a request body.")
+    gemini = request.app.state.gemini
+    if gemini is None:
+        raise HTTPException(503, "AI analysis is unavailable.")
+    try:
+        with request.app.state.ai_limiter.reserve():
+            try:
+                async with asyncio.timeout(10):
+                    snapshot = await load_financial_snapshot(
+                        request.app.state.session_factory, request.app.state.allowed_user_id)
+            except Exception:
+                logger.error("ai_snapshot_failed")
+                raise HTTPException(503, "AI financial data is unavailable.") from None
+            if snapshot.facts["transaction_count"] == 0:
+                return snapshot.response(GeminiAnalysis(
+                    summary="За вказаний період фінансових операцій не записано.",
+                    risks=[], advice=[],
+                ))
+            try:
+                prose = await gemini.analyze(snapshot.gemini_payload())
+                return snapshot.response(prose)
+            except GeminiFailure as error:
+                messages = {429: "AI request limit reached.", 502: "AI returned an unusable response.",
+                            503: "AI analysis is unavailable.", 504: "AI analysis timed out."}
+                logger.warning("ai_provider_failed_%s", error.status)
+                raise HTTPException(error.status, messages[error.status],
+                                    headers={"Retry-After": "60"} if error.status == 429 else None) from None
+            except Exception:
+                logger.error("ai_analysis_failed")
+                raise HTTPException(503, "AI analysis is unavailable.") from None
+    except AnalysisLimited as error:
+        raise HTTPException(429, "AI request limit reached.",
+                            headers={"Retry-After": str(error.retry_after)}) from None
 
 
 async def transaction_payload(request: Request, admin=Depends(require_admin)):

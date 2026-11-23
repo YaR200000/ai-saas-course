@@ -2,9 +2,9 @@
 from datetime import date, datetime
 from decimal import Decimal
 import re
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class TransactionCreate(BaseModel):
@@ -56,3 +56,35 @@ class SummaryResponse(BaseModel):
     total_income: str
     total_expense: str
     balance: str
+
+
+class AiContract(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True, strict=True)
+
+
+AiText = Annotated[str, Field(min_length=1, max_length=500)]
+MoneyText = Annotated[str, Field(max_length=100, pattern=r"^[0-9]+\.[0-9]{2}$")]
+
+
+class GeminiAnalysis(AiContract):
+    """Only prose is generated. Numeric facts are always server-owned."""
+    summary: str = Field(min_length=1, max_length=1200)
+    risks: list[AiText] = Field(max_length=5)
+    advice: list[AiText] = Field(max_length=5)
+
+
+class AiExpenseCategory(AiContract):
+    category: str = Field(min_length=1, max_length=100)
+    amount: MoneyText
+    share_percent: str = Field(pattern=r"^(?:100\.00|[0-9]{1,2}\.[0-9]{2})$")
+
+
+class AiAnalysisResponse(GeminiAnalysis):
+    period_start: date
+    period_end: date
+    currency: Literal["UAH"] = "UAH"
+    transaction_count: int = Field(ge=0)
+    total_income: MoneyText
+    total_expense: MoneyText
+    balance: str = Field(max_length=101, pattern=r"^-?[0-9]+\.[0-9]{2}$")
+    top_expense_categories: list[AiExpenseCategory] = Field(max_length=5)
