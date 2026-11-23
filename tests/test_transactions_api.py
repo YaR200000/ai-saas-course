@@ -258,3 +258,62 @@ def test_summary_large_mixed_totals_remain_exact(client):
     assert client.get("/api/summary").json() == {
         "total_income": "10000000000000000000000000000.30",
         "total_expense": "0.10", "balance": "10000000000000000000000000000.20"}
+
+
+@pytest.fixture
+def mixed_client(client):
+    # Add interleaved incomes and a foreign income to the isolated SQLite only.
+    async def seed():
+        async with app.state.session_factory() as session:
+            session.connection.execute(insert(Transaction), [
+                dict(id=5, user_id=1, category_id=1, type="income",
+                     amount=Decimal("300.00"), description="income one",
+                     date=datetime(2026, 11, 17).date(),
+                     created_at=datetime(2026, 11, 17, 9, tzinfo=timezone.utc)),
+                dict(id=6, user_id=1, category_id=1, type="income",
+                     amount=Decimal("400.00"), description="income two",
+                     date=datetime(2026, 11, 17).date(),
+                     created_at=datetime(2026, 11, 17, 9, tzinfo=timezone.utc)),
+                dict(id=7, user_id=2, category_id=1, type="income",
+                     amount=Decimal("500.00"), description="foreign income",
+                     date=datetime(2026, 11, 17).date(),
+                     created_at=datetime(2026, 11, 17, 9, tzinfo=timezone.utc)),
+            ])
+            session.connection.commit()
+    client.portal.call(seed)
+    return client
+
+
+@pytest.mark.parametrize("kind,ids", [
+    (None, ["6", "5", "3", "2", "1"]),
+    ("all", ["6", "5", "3", "2", "1"]),
+    ("income", ["6", "5"]), ("expense", ["3", "2", "1"]),
+])
+def test_type_filter_and_total(mixed_client, kind, ids):
+    params = {} if kind is None else {"type": kind}
+    response = mixed_client.get("/api/transactions", params=params)
+    assert response.status_code == 200
+    assert [row["id"] for row in response.json()] == ids
+    assert response.headers["x-total-count"] == str(len(ids))
+    assert response.headers["cache-control"] == "no-store"
+    for offset in range(len(ids) + 2):
+        page = mixed_client.get("/api/transactions", params={**params, "limit": 1, "offset": offset})
+        assert page.status_code == 200
+        assert [row["id"] for row in page.json()] == ids[offset:offset + 1]
+        assert page.headers["x-total-count"] == str(len(ids))
+
+
+@pytest.mark.parametrize("kind", ["", "unknown", "INCOME", "all OR 1=1"])
+def test_invalid_type_is_safe(client, kind):
+    response = client.get("/api/transactions", params={"type": kind})
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Invalid request."}
+
+
+@pytest.mark.parametrize("kind", ["all", "income", "expense"])
+def test_filtered_empty_owner(client, kind):
+    app.state.allowed_user_id = 999
+    response = client.get("/api/transactions", params={"type": kind, "offset": 10})
+    assert response.status_code == 200
+    assert response.json() == []
+    assert response.headers["x-total-count"] == "0"

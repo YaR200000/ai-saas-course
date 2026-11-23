@@ -6,12 +6,13 @@ from ipaddress import ip_address
 import logging
 import os
 import re
+from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 from pydantic import ValidationError
-from sqlalchemy import func, select
+from sqlalchemy import func, select, true
 
 from app.database import create_database_engine, create_session_factory
 from app.models import Category, Transaction
@@ -139,6 +140,8 @@ async def remove_transaction(request: Request, transaction_id: int = Depends(del
 @app.get("/api/transactions", response_model=list[TransactionResponse])
 async def transactions(
     request: Request,
+    response: Response,
+    type: Literal["all", "income", "expense"] = Query(default="all"),
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0, le=2**63 - 1),
 ):
@@ -148,18 +151,27 @@ async def transactions(
                Category.name.label("category"), Transaction.description)
         .join(Category, Transaction.category_id == Category.id)
         .where(Transaction.user_id == request.app.state.allowed_user_id)
-        .order_by(Transaction.created_at.desc(), Transaction.id.desc())
-        .limit(limit).offset(offset)
     )
+    if type != "all":
+        statement = statement.where(Transaction.type == type)
+    filtered = statement.cte("filtered_transactions")
+    page = (select(filtered).order_by(filtered.c.created_at.desc(), filtered.c.id.desc())
+            .limit(limit).offset(offset).cte("transaction_page"))
+    count = select(func.count().label("total")).select_from(filtered).cte("transaction_count")
+    # LEFT JOIN preserves the count even for empty/out-of-range pages.
+    # Both count and page use the same database statement snapshot.
+    statement = (select(page, count.c.total).select_from(count.outerjoin(page, true()))
+                 .order_by(page.c.created_at.desc(), page.c.id.desc()))
     try:
         async with request.app.state.session_factory() as session:
             rows = (await session.execute(statement)).mappings().all()
+        response.headers["X-Total-Count"] = str(rows[0]["total"])
         return [TransactionResponse(
             id=str(row["id"]), created_at=row["created_at"],
             type=row["type"], date=row["date"],
             amount=format(row["amount"], ".2f"), category=row["category"],
             description=row["description"],
-        ) for row in rows]
+        ) for row in rows if row["id"] is not None]
     except Exception:
         logger.error("transactions_read_failed")
         return JSONResponse({"detail": "Service unavailable."}, status_code=503)

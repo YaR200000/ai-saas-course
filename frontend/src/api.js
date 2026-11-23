@@ -96,7 +96,7 @@ export async function deleteTransaction(id, password) {
   }
 }
 
-async function request(path, validate, signal) {
+async function request(path, validate, signal, transform = (data) => data) {
   let response;
   try { response = await fetch(path, { signal, cache: 'no-store', credentials: 'omit' }); }
   catch (error) {
@@ -108,7 +108,7 @@ async function request(path, validate, signal) {
   try { data = await response.json(); }
   catch { throw new Error('API повернув некоректну відповідь. Спробуйте ще раз.'); }
   if (!validate(data)) throw new Error('Формат відповіді API не відповідає очікуваному.');
-  return data;
+  return transform(data, response);
 }
 
 export async function createTransaction(payload, password) {
@@ -144,6 +144,19 @@ export function formatCalendarDate(value) {
 }
 
 export const getSummary = (signal) => request('/api/summary', validSummary, signal);
+export function getTransactionPage(page = 0, signal, type = 'all') {
+  if (!Number.isSafeInteger(page) || page < 0) throw new Error('Некоректна сторінка.');
+  if (!['all', 'income', 'expense'].includes(type)) throw new Error('Некоректний тип операцій.');
+  return request(`/api/transactions?limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}&type=${type}`,
+    validTransactions, signal, (items, response) => {
+      const raw = response.headers.get('X-Total-Count');
+      if (raw === null || !/^[0-9]+$/.test(raw) || !Number.isSafeInteger(Number(raw))) {
+        throw new Error('API повернув некоректну кількість операцій.');
+      }
+      return { items, total: Number(raw) };
+    });
+}
+
 export function getTransactions(page = 0, signal) {
   if (!Number.isSafeInteger(page) || page < 0) throw new Error('Некоректна сторінка.');
   return request(`/api/transactions?limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}`, validTransactions, signal);
