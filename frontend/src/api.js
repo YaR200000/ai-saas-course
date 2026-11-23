@@ -33,6 +33,69 @@ export class ApiError extends Error {
   }
 }
 
+const boundedText = (value, limit) => typeof value === 'string' && value.trim().length > 0 && [...value].length <= limit;
+const nonnegativeMoney = (value) => typeof value === 'string' && value.length <= 100 && /^[0-9]+\.[0-9]{2}$/.test(value);
+export function validAiAnalysis(value) {
+  return value && validCalendarDate(value.period_start) && validCalendarDate(value.period_end) &&
+    value.period_start <= value.period_end && value.currency === 'UAH' &&
+    Number.isSafeInteger(value.transaction_count) && value.transaction_count >= 0 &&
+    nonnegativeMoney(value.total_income) && nonnegativeMoney(value.total_expense) &&
+    typeof value.balance === 'string' && value.balance.length <= 101 && money.test(value.balance) &&
+    boundedText(value.summary, 1200) &&
+    ['risks', 'advice'].every((key) => Array.isArray(value[key]) && value[key].length <= 5 && value[key].every((text) => boundedText(text, 500))) &&
+    Array.isArray(value.top_expense_categories) && value.top_expense_categories.length <= 5 &&
+    value.top_expense_categories.every((item) => item && boundedText(item.category, 100) &&
+      nonnegativeMoney(item.amount) && typeof item.share_percent === 'string' &&
+      /^(?:100\.00|[0-9]{1,2}\.[0-9]{2})$/.test(item.share_percent));
+}
+
+export async function analyzeTransactions(password, signal) {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  let timer;
+  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+  signal?.addEventListener('abort', abort, { once: true });
+  const deadline = new Promise((_, reject) => {
+    controller.signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
+    // Backend permits 10 seconds for DB + up to 120 seconds for Gemini.
+    timer = setTimeout(abort, 140000);
+  });
+  try {
+    return await Promise.race([deadline, (async () => {
+      const response = await fetch('/api/ai/analyze-transactions', {
+        method: 'POST', headers: { Authorization: `Bearer ${password}` },
+        credentials: 'omit', cache: 'no-store', redirect: 'error', signal: controller.signal,
+      });
+      if (!response.ok) {
+        const messages = {
+          401: 'Неправильний пароль. Введіть його повторно.',
+          403: 'Локальний захист відхилив запит. Відкрийте панель за локальною адресою.',
+          429: 'Досягнуто ліміту AI-запитів. Зачекайте перед наступною спробою.',
+          502: 'AI повернув непридатну відповідь. Повторіть аналіз пізніше вручну.',
+          503: 'AI-аналіз тимчасово недоступний або не налаштований на сервері.',
+          504: 'Час очікування AI вичерпано. Повторіть спробу пізніше вручну.',
+        };
+        const raw = response.headers.get('Retry-After');
+        const retryAfter = raw && /^[0-9]{1,6}$/.test(raw) ? Math.min(Number(raw), 172800) : null;
+        const message = messages[response.status] || 'Не вдалося виконати AI-аналіз. Спробуйте пізніше.';
+        throw new ApiError(message + (response.status === 429 && retryAfter ? ` Зачекайте щонайменше ${retryAfter} с.` : ''), response.status);
+      }
+      let data;
+      try { data = await response.json(); } catch { throw new ApiError('AI API повернув некоректну відповідь.'); }
+      if (response.status !== 200 || !validAiAnalysis(data)) throw new ApiError('Формат AI-аналізу не відповідає контракту сервера.');
+      return data;
+    })()]);
+  } catch (error) {
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    if (controller.signal.aborted) throw new ApiError('Час очікування AI вичерпано. Запит міг бути врахований сервісом; повторіть його пізніше вручну.');
+    if (error instanceof ApiError) throw error;
+    throw new ApiError('Не вдалося з’єднатися з AI API. Повторіть спробу пізніше вручну.');
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', abort);
+  }
+}
+
 async function httpError(response, writing = false) {
   let data;
   try { data = await response.json(); } catch { /* Never expose raw response bodies. */ }

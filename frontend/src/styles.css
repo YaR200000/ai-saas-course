@@ -814,3 +814,22 @@ th:first-child,td:first-child {
 .transaction-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 0 24px 16px; }
 .transaction-filter select { max-width: 100%; padding: 8px 12px; font: inherit; border: 1px solid #ccd3df; border-radius: 8px; background: white; }
 .transaction-filter select:focus-visible { outline: 2px solid #635bff; outline-offset: 2px; }
+.ai-panel { padding: 24px; margin-bottom: 24px; overflow-wrap: anywhere; }
+.ai-panel h2 { margin: 0 0 12px; }
+.ai-panel p { line-height: 1.6; }
+.ai-button { white-space: normal; max-width: 100%; text-align: left; }
+.ai-results { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin-top: 20px; }
+.ai-results section { padding: 16px; border: 1px solid #dce1ea; border-radius: 12px; min-width: 0; }
+.ai-results h3 { margin: 0 0 12px; }
+.ai-results li { margin-bottom: 8px; line-height: 1.6; }
+.ai-stale { grid-column: 1 / -1; padding: 12px; background: #fff5d6; border-radius: 8px; }
+.ai-totals { display: flex; flex-wrap: wrap; gap: 16px; }
+.ai-totals dt { font-size: 14px; color: #596579; }
+.ai-totals dd { margin: 4px 0 0; font-weight: 700; }
+.ai-categories { list-style: none; padding: 0; }
+.ai-categories li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
+.ai-footnote { font-size: 13px; color: #596579; }
+.ai-spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #ccd3df; border-top-color: #635bff; border-radius: 50%; animation: ai-spin 1s linear infinite; }
+@keyframes ai-spin { to { transform: rotate(360deg); } }
+@media (max-width: 760px) { .ai-results { grid-template-columns: minmax(0, 1fr); } .ai-panel { padding: 16px; } }
+@media (prefers-reduced-motion: reduce) { .ai-spinner { animation: none; } }
