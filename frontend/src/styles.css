@@ -810,3 +810,7 @@ th:first-child,td:first-child {
   }
 
 }
+
+.transaction-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 0 24px 16px; }
+.transaction-filter select { max-width: 100%; padding: 8px 12px; font: inherit; border: 1px solid #ccd3df; border-radius: 8px; background: white; }
+.transaction-filter select:focus-visible { outline: 2px solid #635bff; outline-offset: 2px; }

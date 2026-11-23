@@ -1,16 +1,19 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { deleteTransaction, getSummary, getTransactions } from './api.js';
+import React, { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { deleteTransaction, getSummary, getTransactionPage } from './api.js';
 import { useResource } from './useResource.js';
 import { SummaryCards, TransactionsTable } from './components.jsx';
 import TransactionComposer from './TransactionComposer.jsx';
 import AdminAccess from './AdminAccess.jsx';
 import DeleteTransactionDialog from './DeleteTransactionDialog.jsx';
 import { pageAfterDeletion, submissionGate } from './transactionForm.js';
+import { transactionListReducer } from './transactionList.js';
 
 const loadSummary = (_, signal) => getSummary(signal);
 
 export default function App() {
-  const [page, setPage] = useState(0);
+  const [{ page, type }, dispatchList] = useReducer(transactionListReducer, { page: 0, type: 'all' });
+  const setPage = (value) => dispatchList({ type: 'page', value });
+  const loadTransactions = useCallback((page, signal) => getTransactionPage(page, signal, type), [type]);
   const [summaryVersion, setSummaryVersion] = useState(0);
   const [transactionsVersion, setTransactionsVersion] = useState(0);
   const [password, setPassword] = useState('');
@@ -27,7 +30,8 @@ export default function App() {
     try { await operation(); } finally { setAdminPending(false); }
   });
   const summary = useResource(loadSummary, 0, summaryVersion);
-  const transactions = useResource(getTransactions, page, transactionsVersion);
+  const transactionPage = useResource(loadTransactions, page, transactionsVersion);
+  const transactions = { ...transactionPage, data: transactionPage.data?.items ?? null, total: transactionPage.data?.total };
   const refresh = (targetPage = page) => { setPage(targetPage); setSummaryVersion((n) => n + 1); setTransactionsVersion((n) => n + 1); };
   const busy = summary.status === 'loading' || transactions.status === 'loading';
   useEffect(() => {
@@ -91,7 +95,7 @@ export default function App() {
           {(deleteNotice.unknown || (deleteNotice.success && (summary.status === 'error' || transactions.status === 'error'))) &&
             <button type="button" className="button secondary" disabled={busy || adminPending} onClick={() => refresh()}>Оновити список і показники</button>}
         </div>}
-        <TransactionsTable resource={transactions} page={page} onPage={setPage} onRetry={() => setTransactionsVersion((n) => n + 1)}
+        <TransactionsTable resource={transactions} type={type} onType={(value) => { dispatchList({ type: 'filter', value }); setSelected(null); }} page={page} onPage={setPage} onRetry={() => setTransactionsVersion((n) => n + 1)}
           admin={Boolean(password)} pending={adminPending} deletionBlocked={Boolean(deleteNotice?.unknown)} onDelete={(transaction, trigger) => {
             if (adminPending) return;
             focusReturn.current = trigger; setSelected({ transaction, page, count: transactions.data.length });

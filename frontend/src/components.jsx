@@ -25,17 +25,21 @@ export function SummaryCards({ resource, onRetry }) {
   </section>;
 }
 
-export function TransactionsTable({ resource, page, onPage, onRetry, admin = false, pending = false, deletionBlocked = false, onDelete }) {
+export function TransactionsTable({ resource, page, onPage, onRetry, type = 'all', onType, admin = false, pending = false, deletionBlocked = false, onDelete }) {
   return <section className="transactions panel" aria-labelledby="transactions-heading">
     <div className="section-heading"><div><h2 id="transactions-heading" tabIndex={-1}>Останні операції</h2>
       <p>Нові записи першими · календарна дата операції</p></div><span className="badge">UAH · гривня</span></div>
+    {onType && <div className="transaction-filter"><label htmlFor="transaction-type">Тип операцій</label>
+      <select id="transaction-type" value={type} disabled={pending} onChange={(event) => onType(event.target.value)}>
+        <option value="all">All — Усі</option><option value="income">Income — Доходи</option><option value="expense">Expense — Витрати</option>
+      </select></div>}
     {resource.status === 'error' ? <ErrorState message={resource.error} onRetry={onRetry} /> :
       resource.status === 'loading' ? <div className="table-loading" role="status">{[0, 1, 2, 3].map((n) =>
         <div className="skeleton row-skeleton" key={n} />)}<span>Завантажуємо операції…</span></div> :
       resource.data.length === 0 ? <div className="empty-state"><span className="empty-icon" aria-hidden="true">≡</span>
-        <h3>{page === 0 ? 'Історія починається тут' : 'На цій сторінці немає операцій'}</h3>
-        <p>{page === 0 ? 'Створіть дохід або витрату у формі вище, або додайте витрату через Telegram-бота.' : 'Поверніться на попередню сторінку, щоб переглянути записи.'}</p>
-        {page === 0 && <code>/expense 125.50 кава</code>}</div> :
+        <h3>{type !== 'all' ? 'За цим фільтром немає операцій' : page === 0 ? 'Історія починається тут' : 'На цій сторінці немає операцій'}</h3>
+        <p>{type !== 'all' ? 'Виберіть інший тип або додайте відповідну операцію.' : page === 0 ? 'Створіть дохід або витрату у формі вище, або додайте витрату через Telegram-бота.' : 'Поверніться на попередню сторінку, щоб переглянути записи.'}</p>
+        {page === 0 && type === 'all' && <code>/expense 125.50 кава</code>}</div> :
       <div className="table-scroll"><table><caption className="sr-only">Фінансові операції, сторінка {page + 1}</caption>
         <thead><tr><th>Дата</th><th>Тип</th><th className="numeric">Сума</th><th>Категорія</th><th>Опис</th>{admin && <th>Дії</th>}</tr></thead>
         <tbody>{resource.data.map((row) => <tr key={row.id}>
@@ -45,10 +49,10 @@ export function TransactionsTable({ resource, page, onPage, onRetry, admin = fal
           {admin && <td><button type="button" className="button danger" disabled={pending || deletionBlocked} onClick={(event) => onDelete(row, event.currentTarget)}
             aria-label={`Видалити ${row.type === 'income' ? 'дохід' : 'витрату'} ${formatMoney(row.amount)} від ${formatCalendarDate(row.date)}`}>Видалити</button></td>}
         </tr>)}</tbody></table></div>}
-    <div className="table-footer"><span>Сторінка {page + 1} <span className="footer-detail">· до {PAGE_SIZE} операцій</span></span>
+    <div className="table-footer"><span>Сторінка {page + 1} <span className="footer-detail">· до {PAGE_SIZE} операцій{resource.total !== undefined && ` · Усього: ${resource.total}`}</span></span>
       <nav aria-label="Сторінки операцій"><button className="button secondary" disabled={pending || page === 0 || resource.status === 'loading'}
         onClick={() => onPage(page - 1)}>← Назад</button>
-        <button className="button secondary" disabled={pending || resource.status !== 'ready' || resource.data.length < PAGE_SIZE}
+        <button className="button secondary" disabled={pending || resource.status !== 'ready' || (resource.total === undefined ? resource.data.length < PAGE_SIZE : (page + 1) * PAGE_SIZE >= resource.total)}
           onClick={() => onPage(page + 1)}>Далі →</button></nav></div>
   </section>;
 }

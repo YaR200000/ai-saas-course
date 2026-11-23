@@ -38,7 +38,7 @@ def test_dashboard_stack(client, scenario, caplog):
         def do_GET(self):
             response = client.get(self.path, headers=dict(self.headers))
             self.send_response(response.status_code)
-            for header in ("content-type", "cache-control", "x-content-type-options"):
+            for header in ("content-type", "cache-control", "x-content-type-options", "x-total-count"):
                 if header in response.headers:
                     self.send_header(header, response.headers[header])
             self.send_header("Content-Length", str(len(response.content)))

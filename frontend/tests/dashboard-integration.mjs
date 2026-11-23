@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { once } from 'node:events';
 import { createServer } from 'vite';
-import { getSummary, getTransactions, formatMoney } from '../src/api.js';
+import { getSummary, getTransactions, getTransactionPage, formatMoney } from '../src/api.js';
 import { proxyOptions } from '../local-proxy.js';
 
 const [scenario, backend] = process.argv.slice(2);
@@ -43,6 +43,11 @@ try {
     assert.ok(!JSON.stringify(rows).includes('other-user-private'));
     assert.ok(!JSON.stringify(rows).includes('telegram_'));
     assert.deepEqual(await getTransactions(1), []);
+    const expenses = await getTransactionPage(0, undefined, 'expense');
+    assert.equal(expenses.total, 3);
+    assert.deepEqual(expenses.items.map((row) => row.id), ['3', '2', '1']);
+    assert.deepEqual(await getTransactionPage(0, undefined, 'income'), { items: [], total: 0 });
+    assert.deepEqual(await getTransactionPage(1, undefined, 'expense'), { items: [], total: 3 });
     const page = await (await fetch('/api/transactions?limit=1&offset=1&user_id=2')).json();
     assert.deepEqual(page.map((row) => row.id), ['2']);
     const forged = await fetch('/api/summary?user_id=2&telegram_id=202&limit=1&offset=99', {
